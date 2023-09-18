@@ -3,6 +3,7 @@ import dash_bootstrap_components as dbc
 import flask
 import pandas as pd
 import plotly.express as px
+import requests
 from dash import dcc, html
 from dash.dependencies import Input, Output
 
@@ -11,7 +12,7 @@ app = dash.Dash(__name__, server, external_stylesheets=[dbc.themes.FLATLY])
 server.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024
 
 df = pd.read_csv("urnas.csv")
-geojson_data = "TOgeojs.json"
+dft = pd.read_csv("resultado.csv")
 
 
 app.layout = html.Div(
@@ -43,15 +44,48 @@ app.layout = html.Div(
                                         dbc.Col(
                                             [
                                                 dbc.Card(
-                                                    html.H5("Total de Urnas Apuradas"),
+                                                    [
+                                                        dbc.Row(
+                                                            [
+                                                                html.H5(
+                                                                    "Total de Urnas Apuradas"
+                                                                )
+                                                            ]
+                                                        ),
+                                                        dbc.Row(
+                                                            html.H5(id="total_urnas")
+                                                        ),
+                                                    ],
                                                     className="p-4 text-center shadow-sm",
                                                 ),
                                                 dbc.Card(
-                                                    html.H5("Total de Seções Apuradas"),
+                                                    [
+                                                        dbc.Row(
+                                                            [
+                                                                html.H5(
+                                                                    "Total de Seções Apuradas"
+                                                                )
+                                                            ]
+                                                        ),
+                                                        dbc.Row(
+                                                            html.H5(id="total_secoes")
+                                                        ),
+                                                    ],
                                                     className="p-4 text-center shadow-sm",
                                                 ),
                                                 dbc.Card(
-                                                    html.H5("Total de Votos Apurados"),
+                                                    [
+                                                        dbc.Row(
+                                                            [
+                                                                html.H5(
+                                                                    "Total de Votos Apurados"
+                                                                )
+                                                            ]
+                                                        ),
+                                                        dbc.Row(
+                                                            html.H5(id="total_votos")
+                                                        ),
+                                                    ],
                                                     className="p-4 text-center shadow-sm",
                                                 ),
                                             ]
@@ -59,7 +93,14 @@ app.layout = html.Div(
                                         dbc.Col(
                                             [
                                                 dbc.Card(
-                                                    html.H5("Resultado"),
+                                                    [
+                                                        dbc.Row(
+                                                            html.H5("Resultado"),
+                                                        ),
+                                                        dbc.Row(
+                                                            dcc.Graph(id="resultado")
+                                                        ),
+                                                    ],
                                                     className="p-4 text-center shadow-sm",
                                                 )
                                             ]
@@ -91,9 +132,10 @@ app.layout = html.Div(
 
 @app.callback(Output("map", "figure"), Input("dropdown", "value"))
 def update_map(selected_variable):
-    with open(geojson_data, "r") as file:
-        geojson = file.read()
-
+    response = requests.get(
+        "https://raw.githubusercontent.com/tbrugz/geodata-br/master/geojson/geojs-17-mun.json"
+    )
+    geojson = response.json()
     fig = px.choropleth_mapbox(
         df,
         geojson=geojson,
@@ -129,6 +171,45 @@ def update_map(selected_variable):
 @app.callback(Output("nome_cidade", "children"), Input("dropdown", "value"))
 def update_nome_cidade(value):
     return value
+
+
+@app.callback(
+    Output("total_urnas", "children"),
+    Input("dropdown", "value"),
+)
+def update_total_urnas(value):
+    return (dft[dft["cidade"] == value]["urnas_apuradas"].sum(),)
+
+
+@app.callback(
+    Output("total_secoes", "children"),
+    Input("dropdown", "value"),
+)
+def update_total_secoes(value):
+    return (dft[dft["cidade"] == value]["secoes_apuradas"].sum(),)
+
+
+@app.callback(
+    Output("total_votos", "children"),
+    Input("dropdown", "value"),
+)
+def update_total_votos(value):
+    return (dft[dft["cidade"] == value]["votos_apurados"].sum(),)
+
+
+@app.callback(
+    Output("resultado", "figure"),
+    Input("dropdown", "value"),
+)
+def update_resultado(value):
+    df_filtered = dft.drop(
+        ["urnas_apuradas", "secoes_apuradas", "votos_apurados"], axis=1
+    )
+    df_city = df_filtered[df_filtered["cidade"] == value]
+    non_empty_values = df_city.iloc[0].dropna()
+    fig = px.pie(values=non_empty_values.values, names=non_empty_values.index)
+
+    return fig
 
 
 if __name__ == "__main__":
